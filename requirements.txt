@@ -1,0 +1,10 @@
+numpy
+tqdm
+matplotlib
+tensorboard
+scikit-learn
+pre-commit
+pandas
+PyYAML
+xgboost
+seaborn
