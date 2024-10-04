@@ -1,0 +1,11 @@
+path: "data/welddb.csv"
+target_col: "yield"
+all_targets:
+    - "yield"
+    - "hardness"
+    - "elongation"
+    - "reduc_area"
+datetime_cols: 
+cols_to_delete:
+cleaned_data_path: "output/data/welddb.csv"
+task: "regression"
