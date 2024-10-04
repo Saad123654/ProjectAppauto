@@ -45,18 +45,13 @@ class LoadData:
     def __init__(self, path: str):
         self.path = get_path(path)
 
-    def load_csv(self, keep_index: bool = False) -> pd.DataFrame:
+    def load_csv(self) -> pd.DataFrame:
         """Load the csv file.
-
-        Args:
-            keep_index (bool): whether to keep the index or not. Defaults to False.
 
         Returns:
             pd.DataFrame: dataframe
         """
-        if keep_index:
-            return pd.read_csv(self.path, index_col=0)
-        return pd.read_csv(self.path)
+        return pd.read_csv(self.path, index_col=0)
 
 
 class Preprocessor:
@@ -193,7 +188,7 @@ class Preprocessor:
             df = self.add_entries(df, self.add_cols)
         if self.values_to_delete is not None:
             df = self.delete_entries(df, self.values_to_delete)
-        df.dropna(inplace=True)
+        # df.dropna(inplace=True)
         if "Unnamed: 0" in df.columns:
             df.drop("Unnamed: 0", axis=1, inplace=True)
         if self.cols_to_delete is not None:
@@ -233,7 +228,7 @@ class DataCleaner:
             Defaults to 0.7.
     """
 
-    def __init__(self, df, target_col: str, corr_threshold: float = 0.7):
+    def __init__(self, df, target_col: str, corr_threshold: float = 0.8):
         self.df = df
         self.corr_threshold = corr_threshold
         self.target_col = target_col
@@ -247,7 +242,7 @@ class DataCleaner:
         Returns:
             pd.DataFrame: correlation matrix
         """
-        return df.corr().abs()
+        return df.corr(numeric_only=True).abs()
 
     def plot_corr_matrix(self, df: pd.DataFrame) -> None:
         """Plot the correlation matrix.
@@ -317,6 +312,7 @@ def fast_load(
 
     path = config["path"]
     target_col = config["target_col"]
+    all_target_cols = config["all_targets"]
     task = config["task"]
     cleaned_data_path = config["cleaned_data_path"]
     if "datetime_cols" not in config.keys():
@@ -360,6 +356,7 @@ def fast_load(
         "target_col": target_col,
         "task": task,
         "data_cleaner": data_cleaner,
+        "all_target_cols": all_target_cols,
     }.values()
 
 
@@ -392,14 +389,15 @@ def load_data(
         config = yaml.load(f, Loader=SafeLoader)
     if from_cleaned:
         path = get_path(config["cleaned_data_path"])
-        data = pd.read_csv(path)
+        data = pd.read_csv(path, index_col=0)
         return {
             "data": data,
             "target_col": config["target_col"],
             "task": config["task"],
             "data_cleaner": None,
+            "all_target_cols": config["all_targets"],
         }.values()
-    data, target_col, task, data_cleaner = fast_load(
+    data, target_col, task, data_cleaner, all_target_cols = fast_load(
         config_path, values_to_delete, add_list, keep_corr_features
     )
     return {
@@ -407,4 +405,5 @@ def load_data(
         "target_col": target_col,
         "task": task,
         "data_cleaner": data_cleaner,
+        "all_target_cols": all_target_cols,
     }.values()

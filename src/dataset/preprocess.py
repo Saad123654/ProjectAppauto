@@ -13,6 +13,7 @@ from sklearn.preprocessing import (
     RobustScaler,
     StandardScaler,
 )
+from sklearn.impute import KNNImputer
 
 
 class Scaler:
@@ -109,6 +110,26 @@ class Scaler:
                 cat_cols_names.append(col)
         return cat_cols_names
 
+    def complete_nan(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Complete missing values in the dataframe using KNNImputer.
+
+        Args:
+            df (pd.DataFrame): dataframe
+
+        Returns:
+            pd.DataFrame: dataframe with completed missing values
+        """
+        imputer = KNNImputer(n_neighbors=5)
+        df_numerical = df.select_dtypes(include=np.number)
+        df_categorical = df.select_dtypes(exclude=np.number)
+        df_copy = df.copy()
+        df_copy[df_numerical.columns] = imputer.fit_transform(df_numerical)
+        df_copy[df_categorical.columns] = df_categorical
+        df_copy = df_copy.reset_index(drop=True)
+        df_copy = df_copy.astype(df.dtypes.to_dict())
+        data, target = df_copy.drop(self.target_col, axis=1), df_copy[self.target_col]
+        return data, target
+
     def encode_categorical(
         self,
         x_train: pd.DataFrame,
@@ -176,6 +197,7 @@ class Scaler:
         Returns:
             tuple: x_train, x_test, y_train, y_test
         """
+
         x_num_scaler = (
             self.scalers[self.x_num_scaler_name]
             if self.x_num_scaler_name is not None
@@ -199,6 +221,8 @@ class Scaler:
         x_train_num = x_train_num.astype(np.float32)
         x_test_num = x_testcp.loc[:, ~x_testcp.columns.isin(self.categorical_cols)]
         x_test_num = x_test_num.astype(np.float32)
+        full_train_df = pd.concat([x_train_num, y_traincp], axis=1)
+        x_train_num, y_traincp = self.complete_nan(full_train_df)
         if self.x_num_scaler_name is not None and x_train_num.shape[1] > 0:
             x_train_num = x_num_scaler.fit_transform(x_train_num)
             x_train_num = pd.DataFrame(x_train_num, columns=x_num_cols)
@@ -257,6 +281,7 @@ class Dataset:
         target_name: str,
     ):
         self.target_name = target_name
+        self.full_df = data
         self.data = data.drop(target_name, axis=1)
         self.target = data[target_name]
 
