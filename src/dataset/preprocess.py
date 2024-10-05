@@ -21,7 +21,7 @@ class Scaler:
 
     Attributes:
         df (pd.DataFrame): input dataframe
-        target_col (str): target column name
+        self.all_target_cols (str): target column names
         categorical_cols (list): list of categorical columns
         x_num_scaler_name (str): scaler to use for x. Must be either
             None or one of standard, minmax, quantile_normal, quantile_uniform,
@@ -41,7 +41,7 @@ class Scaler:
 
     Args:
         df (pd.DataFrame): input dataframe
-        target_col (str, optional): target column name. Defaults to None.
+        self.all_target_cols (str, optional): target column names. Defaults to None.
         x_num_scaler_name (Optional[str], optional): scaler to use for x.
             Must be either None or one of standard, minmax, quantile_normal,
             quantile_uniform, maxabs, robust. Defaults to None.
@@ -57,14 +57,14 @@ class Scaler:
     def __init__(
         self,
         df: pd.DataFrame,
-        target_col: Optional[str] = None,
+        all_target_cols: Optional[str] = None,
         x_num_scaler_name: Optional[str] = None,
         x_cat_encoder_name: Optional[str] = None,
         y_scaler_name: Optional[str] = None,
         cat_not_to_onehot: Optional[List[str]] = [],
     ):
         self.df = df
-        self.target_col = target_col
+        self.all_target_cols = all_target_cols
         self.categorical_cols = list(set(df.select_dtypes(include=["object"]).columns))
         self.x_num_scaler_name = x_num_scaler_name
         self.x_cat_encoder_name = x_cat_encoder_name
@@ -118,6 +118,7 @@ class Scaler:
 
         Returns:
             pd.DataFrame: dataframe with completed missing values
+            sklearn.impute.KNNImputer: imputer
         """
         imputer = KNNImputer(n_neighbors=5)
         df_numerical = df.select_dtypes(include=np.number)
@@ -127,8 +128,7 @@ class Scaler:
         df_copy[df_categorical.columns] = df_categorical
         df_copy = df_copy.reset_index(drop=True)
         df_copy = df_copy.astype(df.dtypes.to_dict())
-        data, target = df_copy.drop(self.target_col, axis=1), df_copy[self.target_col]
-        return data, target
+        return df_copy, imputer
 
     def encode_categorical(
         self,
@@ -150,7 +150,7 @@ class Scaler:
         Returns:
             pd.DataFrame: dataframe with encoded categorical columns
         """
-        categorical_cols = list(set(self.categorical_cols) - set([self.target_col]))
+        categorical_cols = list(set(self.categorical_cols) - set(self.all_target_cols))
         x_traincp, x_testcp = x_train.copy(), x_test.copy()
         for col in categorical_cols:
             if col not in cat_not_to_onehot and x_cat_encoder == "onehot":
@@ -160,23 +160,19 @@ class Scaler:
                 ).toarray()
                 x_traincp = x_traincp.drop(col, axis=1)
                 for i in range(one_hot_train.shape[1]):
-                    x_traincp[col + "_" + str(i)] = one_hot_train[:, i].astype(np.int32)
+                    x_traincp[col + "_" + str(i)] = one_hot_train[:, i]
                 one_hot_test = one.transform(
                     x_testcp[col].values.reshape(-1, 1)
                 ).toarray()
                 x_testcp = x_testcp.drop(col, axis=1)
                 for i in range(one_hot_test.shape[1]):
-                    x_testcp[col + "_" + str(i)] = one_hot_test[:, i].astype(np.int32)
+                    x_testcp[col + "_" + str(i)] = one_hot_test[:, i]
             else:
                 le = OrdinalEncoder(
                     handle_unknown="use_encoded_value", unknown_value=-1
                 )
-                x_traincp[col] = le.fit_transform(
-                    x_traincp[col].values.reshape(-1, 1)
-                ).astype(np.int32)
-                x_testcp[col] = le.transform(
-                    x_testcp[col].values.reshape(-1, 1)
-                ).astype(np.int32)
+                x_traincp[col] = le.fit_transform(x_traincp[col].values.reshape(-1, 1))
+                x_testcp[col] = le.transform(x_testcp[col].values.reshape(-1, 1))
         return x_traincp, x_testcp
 
     def do_scaling(
@@ -215,14 +211,12 @@ class Scaler:
             x_traincp, x_testcp = x_train, x_test
         y_traincp, y_testcp = y_train, y_test
 
-        self.categorical_cols = self.__cat_cols__(x_traincp)
+        self.categorical_cols += self.__cat_cols__(x_traincp)
         x_num_cols = x_traincp.columns[~x_traincp.columns.isin(self.categorical_cols)]
         x_train_num = x_traincp.loc[:, ~x_traincp.columns.isin(self.categorical_cols)]
         x_train_num = x_train_num.astype(np.float32)
         x_test_num = x_testcp.loc[:, ~x_testcp.columns.isin(self.categorical_cols)]
         x_test_num = x_test_num.astype(np.float32)
-        full_train_df = pd.concat([x_train_num, y_traincp], axis=1)
-        x_train_num, y_traincp = self.complete_nan(full_train_df)
         if self.x_num_scaler_name is not None and x_train_num.shape[1] > 0:
             x_train_num = x_num_scaler.fit_transform(x_train_num)
             x_train_num = pd.DataFrame(x_train_num, columns=x_num_cols)
@@ -235,16 +229,20 @@ class Scaler:
                 str,
             ]:
                 y_traincp = y_scaler.fit_transform(y_traincp)
-                y_traincp = pd.DataFrame(y_traincp, columns=[self.target_col])
+                y_traincp = pd.DataFrame(y_traincp, columns=self.all_target_cols)
                 y_traincp = y_traincp - y_traincp.min()
                 y_testcp = y_scaler.transform(y_testcp)
-                y_testcp = pd.DataFrame(y_testcp, columns=[self.target_col])
+                y_testcp = pd.DataFrame(y_testcp, columns=self.all_target_cols)
                 y_testcp = y_testcp - y_testcp.min()
             else:
                 y_traincp = y_scaler.fit_transform(y_traincp.values.reshape(-1, 1))
-                y_traincp = pd.DataFrame(y_traincp.flatten(), columns=[self.target_col])
+                y_traincp = pd.DataFrame(
+                    y_traincp.flatten(), columns=self.all_target_cols
+                )
                 y_testcp = y_scaler.transform(y_testcp.values.reshape(-1, 1))
-                y_testcp = pd.DataFrame(y_testcp.flatten(), columns=[self.target_col])
+                y_testcp = pd.DataFrame(
+                    y_testcp.flatten(), columns=self.all_target_cols
+                )
         x_train_cat = x_traincp.loc[:, x_traincp.columns.isin(self.categorical_cols)]
         x_train_cat = x_train_cat.reset_index(drop=True)
         x_train_num = x_train_num.reset_index(drop=True)
@@ -263,30 +261,30 @@ class Dataset:
 
     Attributes:
         target_name (str): name of the target column
-        data (pd.DataFrame): input data
-        target (pd.Series): target column
+        all_targets_name (Optional[List[str]]): list of all target columns
 
     Methods:
         get_train_test: create train/test splits
         get_classes_num: get the number of classes for the task
 
     Args:
-        data (pd.DataFrame): input data
         target_name (str): name of the target column
+        all_targets_name (Optional[List[str]]): list of all target columns
     """
 
     def __init__(
         self,
-        data: pd.DataFrame,
         target_name: str,
+        all_targets_name: Optional[List[str]] = None,
     ):
         self.target_name = target_name
-        self.full_df = data
-        self.data = data.drop(target_name, axis=1)
-        self.target = data[target_name]
+        self.all_targets_name = all_targets_name
 
     def get_train_test(
-        self, test_size: float = 0.2, scaler_params: Optional[Dict[str, str]] = None
+        self,
+        data,
+        test_size: float = 0.2,
+        scaler_params: Optional[Dict[str, str]] = None,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
         """Create train/test splits.
 
@@ -299,8 +297,9 @@ class Dataset:
             tuple: x_train, x_test, y_train, y_test
         """
         assert 0 < test_size < 1, "test_size must be between 0 and 1"
+        x, y = data.drop(self.all_targets_name, axis=1), data[self.all_targets_name]
         x_train, x_test, y_train, y_test = train_test_split(
-            self.data, self.target, test_size=test_size
+            x, y, test_size=test_size, random_state=42
         )
         if scaler_params is not None:
             scaler = Scaler(x_train, self.target_name, **scaler_params)
@@ -311,40 +310,70 @@ class Dataset:
         y_train, y_test = y_train.reset_index(drop=True), y_test.reset_index(drop=True)
         return x_train, x_test, y_train, y_test
 
-    def get_train_val(
-        self, x_train: pd.DataFrame, y_train: pd.Series, val_size: float = 0.2
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """Create train/val splits.
+    def get_train_test_by_target(
+        self, X, y, target_name: str, test_size: float = 0.2
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Create train/test splits by target.
 
         Args:
-            x_train (pd.DataFrame): input data
-            y_train (pd.Series): target column
-            val_size (float, optional): validation size. Defaults to 0.2.
+            target_name (str): name of the target column
+            test_size (float, optional): test size. Defaults to 0.2.
 
         Returns:
-            tuple: x_train, x_val, y_train, y_val
+            tuple: x_train, y_train, x_test, y_test
         """
-        assert 0 < val_size < 1, "val_size must be between 0 and 1"
-        x_train, x_val, y_train, y_val = train_test_split(
-            x_train, y_train, test_size=val_size
+        assert 0 < test_size < 1, "test_size must be between 0 and 1"
+        x_train, x_test, y_train, y_test = train_test_split(
+            X, y[target_name], test_size=test_size, random_state=42
         )
-        x_train, x_val = x_train.reset_index(drop=True), x_val.reset_index(drop=True)
-        y_train, y_val = y_train.reset_index(drop=True), y_val.reset_index(drop=True)
-        return x_train, x_val, y_train, y_val
+        x_train, x_test = x_train.reset_index(drop=True), x_test.reset_index(drop=True)
+        y_train, y_test = y_train.reset_index(drop=True), y_test.reset_index(drop=True)
+        return x_train, y_train, x_test, y_test
 
-    def get_classes_num(self, task: str) -> int:
-        """Get the number of classes for the task. Return 1 for regression.
+    def get_no_nan_values(self, X, y):
+        """Keep only non-NaN values from y."""
+        nan_idx = np.where(np.isnan(y))[0]
+        X_no_nan = X.drop(nan_idx)
+        y_no_nan = y.drop(nan_idx)
+        X_no_nan = X_no_nan.reset_index(drop=True)
+        y_no_nan = y_no_nan.reset_index(drop=True)
+        return X_no_nan, y_no_nan
 
-        Args:
-            task (str): task type
+    def get_train_test_lists_bytarget(self, X, y, test_size: float = 0.2):
+        X_train_list_full = []
+        y_train_list_full = []
+        X_test_list_full = []
+        y_test_list_full = []
 
-        Returns:
-            int: number of classes
-        """
-        assert task in [
-            "classification",
-            "regression",
-        ], "task must be in ['classification', 'regression']"
-        if task == "regression":
-            return 1
-        return np.unique(self.target).shape[0]
+        X_train_list_no_nan = []
+        y_train_list_no_nan = []
+        X_test_list_no_nan = []
+        y_test_list_no_nan = []
+        for target in self.all_targets_name:
+            X_train_i, y_train_i, X_test_i, y_test_i = self.get_train_test_by_target(
+                X, y, target, test_size=test_size
+            )
+            X_train_list_full.append(X_train_i)
+            y_train_list_full.append(y_train_i)
+            X_test_list_full.append(X_test_i)
+            y_test_list_full.append(y_test_i)
+            X_train_i_no_nan, y_train_i_no_nan = self.get_no_nan_values(
+                X_train_i, y_train_i
+            )
+            X_train_list_no_nan.append(X_train_i_no_nan)
+            y_train_list_no_nan.append(y_train_i_no_nan)
+            X_test_i_no_nan, y_test_i_no_nan = self.get_no_nan_values(
+                X_test_i, y_test_i
+            )
+            X_test_list_no_nan.append(X_test_i_no_nan)
+            y_test_list_no_nan.append(y_test_i_no_nan)
+        return (
+            X_train_list_full,
+            y_train_list_full,
+            X_test_list_full,
+            y_test_list_full,
+            X_train_list_no_nan,
+            y_train_list_no_nan,
+            X_test_list_no_nan,
+            y_test_list_no_nan,
+        )
