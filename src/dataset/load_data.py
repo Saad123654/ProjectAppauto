@@ -146,7 +146,7 @@ class DataLoader:
         """
         return pd.read_csv(self.path, index_col=0)
 
-    def load_data(self) -> List:
+    def load_data(self) -> list:
         """Provides a fast way to load data and preprocess it.
 
         Returns:

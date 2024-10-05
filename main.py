@@ -4,6 +4,7 @@ from src.train.trainer import Trainer
 import numpy as np
 import torch
 import random
+import pandas as pd
 
 random.seed(42)
 np.random.seed(42)
@@ -46,6 +47,7 @@ X_test_list_no_nan = all_lists[6]
 y_test_list_no_nan = all_lists[7]
 
 # Train one model for no-NaN y values of X_train_i, y_train_i and evaluate it on X_test_i, y_test_i
+models = {}
 for X_train_i, y_train_i, X_test_i, y_test_i in zip(
     X_train_list_no_nan, y_train_list_no_nan, X_test_list_no_nan, y_test_list_no_nan
 ):
@@ -53,22 +55,45 @@ for X_train_i, y_train_i, X_test_i, y_test_i in zip(
     print("Number of samples: ", X_train_i.shape[0])
     trainer = Trainer(MODEL_NAME, task, {}, device="cuda")
 
-    # trainer.train(X_train_i, y_train_i)
-    params_grid_search = {
-        "min_child_weight": [1, 5, 10],
-        "gamma": [0.5, 1, 1.5, 2, 5],
-        "subsample": [0.6, 0.8, 1.0],
-        "colsample_bytree": [0.6, 0.8, 1.0],
-        "max_depth": [3, 4, 5],
-    }
-    trainer.cross_val(
-        X_train_i, y_train_i, params_grid_search, scoring="neg_root_mean_squared_error"
-    )
+    trainer.train(X_train_i, y_train_i)
+    # params_grid_search = {
+    #     "min_child_weight": [1, 5, 10],
+    #     "gamma": [0.5, 1, 1.5, 2, 5],
+    #     "subsample": [0.6, 0.8, 1.0],
+    #     "colsample_bytree": [0.6, 0.8, 1.0],
+    #     "max_depth": [3, 4, 5],
+    # }
+    # trainer.cross_val(
+    #     X_train_i, y_train_i, params_grid_search, scoring="neg_root_mean_squared_error"
+    # )
+    model_i = trainer.model
+    models[y_train_i.name] = model_i
     metrics = trainer.get_metrics(X_test_i, y_test_i)
     print(metrics)
     print("\n")
 
 # Predict the other missing values of y_train_i/y_test_i using the model trained on no-NaN y values of X_train_i, y_train_i
-# Merge X_train_i, y_train_i, X_test_i, y_test_i, y_train_i_pred, y_test_i_pred into X_train, y_train
+y_train_res_list = []
+y_test_res_list = []
+for X_train_i, y_train_i, X_test_i, y_test_i in zip(
+    X_train_list_full, y_train_list_full, X_test_list_full, y_test_list_full
+):
+    print("Predicting nan values for target: ", y_train_i.name)
+    y_train_i_pred = models[y_train_i.name].predict(X_train_i)
+    y_test_i_pred = models[y_train_i.name].predict(X_test_i)
+    # copmplete the missing values of y_train_i/y_test_i using the model trained on no-NaN y values of X_train_i, y_train_i
+    y_train_i_completed = np.where(np.isnan(y_train_i), y_train_i_pred, y_train_i)
+    y_test_i_completed = np.where(np.isnan(y_test_i), y_test_i_pred, y_test_i)
+    y_train_i_completed = pd.DataFrame(y_train_i_completed, columns=[y_train_i.name])
+    y_test_i_completed = pd.DataFrame(y_test_i_completed, columns=[y_test_i.name])
+    y_train_res_list.append(y_train_i_completed)
+    y_test_res_list.append(y_test_i_completed)
+
+# Merge all y_train_i_pred, y_test_i_pred into y_train
+all_y_res = []
+for y_train_i, y_test_i in zip(y_train_res_list, y_test_res_list):
+    all_y_res.append(pd.concat([y_train_i, y_test_i], axis=0))
+y_train_completed = pd.concat(all_y_res, axis=1)
+
 # Apply clustering to the y_train values to improve the pipeline
 # Test the final pipeline to the original X_test
