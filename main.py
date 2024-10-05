@@ -1,10 +1,6 @@
 from src.dataset.load_data import DataLoader
 from src.dataset.preprocess import Dataset, Scaler
 from src.train.trainer import Trainer
-from sklearn.cluster import KMeans
-from sklearn.manifold import TSNE
-from sklearn.impute import KNNImputer
-from matplotlib import pyplot as plt
 import numpy as np
 import torch
 import random
@@ -57,7 +53,17 @@ for X_train_i, y_train_i, X_test_i, y_test_i in zip(
     print("Number of samples: ", X_train_i.shape[0])
     trainer = Trainer(MODEL_NAME, task, {}, device="cuda")
 
-    trainer.train(X_train_i, y_train_i)
+    # trainer.train(X_train_i, y_train_i)
+    params_grid_search = {
+        "min_child_weight": [1, 5, 10],
+        "gamma": [0.5, 1, 1.5, 2, 5],
+        "subsample": [0.6, 0.8, 1.0],
+        "colsample_bytree": [0.6, 0.8, 1.0],
+        "max_depth": [3, 4, 5],
+    }
+    trainer.cross_val(
+        X_train_i, y_train_i, params_grid_search, scoring="neg_root_mean_squared_error"
+    )
     metrics = trainer.get_metrics(X_test_i, y_test_i)
     print(metrics)
     print("\n")

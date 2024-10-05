@@ -1,5 +1,3 @@
-from typing import List, Optional, Tuple
-
 import os
 import matplotlib.pyplot as plt
 import numpy as np

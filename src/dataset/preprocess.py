@@ -311,7 +311,7 @@ class Dataset:
         return x_train, x_test, y_train, y_test
 
     def get_train_test_by_target(
-        self, X, y, target_name: str, test_size: float = 0.2
+        self, x, y, target_name: str, test_size: float = 0.2
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Create train/test splits by target.
 
@@ -324,22 +324,22 @@ class Dataset:
         """
         assert 0 < test_size < 1, "test_size must be between 0 and 1"
         x_train, x_test, y_train, y_test = train_test_split(
-            X, y[target_name], test_size=test_size, random_state=42
+            x, y[target_name], test_size=test_size, random_state=42
         )
         x_train, x_test = x_train.reset_index(drop=True), x_test.reset_index(drop=True)
         y_train, y_test = y_train.reset_index(drop=True), y_test.reset_index(drop=True)
         return x_train, y_train, x_test, y_test
 
-    def get_no_nan_values(self, X, y):
+    def get_no_nan_values(self, x, y):
         """Keep only non-NaN values from y."""
         nan_idx = np.where(np.isnan(y))[0]
-        X_no_nan = X.drop(nan_idx)
+        x_nonan = x.drop(nan_idx)
         y_no_nan = y.drop(nan_idx)
-        X_no_nan = X_no_nan.reset_index(drop=True)
+        x_nonan = x_nonan.reset_index(drop=True)
         y_no_nan = y_no_nan.reset_index(drop=True)
-        return X_no_nan, y_no_nan
+        return x_nonan, y_no_nan
 
-    def get_train_test_lists_bytarget(self, X, y, test_size: float = 0.2):
+    def get_train_test_lists_bytarget(self, x, y, test_size: float = 0.2):
         X_train_list_full = []
         y_train_list_full = []
         X_test_list_full = []
@@ -351,7 +351,7 @@ class Dataset:
         y_test_list_no_nan = []
         for target in self.all_targets_name:
             X_train_i, y_train_i, X_test_i, y_test_i = self.get_train_test_by_target(
-                X, y, target, test_size=test_size
+                x, y, target, test_size=test_size
             )
             X_train_list_full.append(X_train_i)
             y_train_list_full.append(y_train_i)
