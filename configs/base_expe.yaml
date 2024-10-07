@@ -5,7 +5,6 @@ all_targets:
     - "hardness"
     - "elongation"
     - "reduc_area"
-datetime_cols: 
-cols_to_delete:
+    - "ult_tens_str"
 cleaned_data_path: "output/data/welddb.csv"
 task: "regression"
