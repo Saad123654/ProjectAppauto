@@ -14,6 +14,7 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 from sklearn.impute import KNNImputer
+from sklearn.decomposition import PCA
 
 
 class Scaler:
@@ -122,13 +123,30 @@ class Scaler:
         """
         imputer = KNNImputer(n_neighbors=5)
         df_numerical = df.select_dtypes(include=np.number)
-        df_categorical = df.select_dtypes(exclude=np.number)
         df_copy = df.copy()
         df_copy[df_numerical.columns] = imputer.fit_transform(df_numerical)
-        df_copy[df_categorical.columns] = df_categorical
         df_copy = df_copy.reset_index(drop=True)
         df_copy = df_copy.astype(df.dtypes.to_dict())
         return df_copy, imputer
+
+    def apply_pca(self, df: pd.DataFrame, n_components: int) -> pd.DataFrame:
+        """Apply PCA to the dataframe.
+
+        Args:
+            df (pd.DataFrame): dataframe
+            n_components (int): number of components
+
+        Returns:
+            pd.DataFrame: dataframe with PCA applied
+        """
+        pca = PCA(n_components=n_components)
+        df_copy = df.copy()
+        df_copy = pca.fit_transform(df_copy)
+        columns = [f"component_{i}" for i in range(n_components)]
+        # print explained variance
+        print(pca.explained_variance_ratio_)
+        df_copy = pd.DataFrame(df_copy, columns=columns, index=df.index)
+        return df_copy
 
     def encode_categorical(
         self,
