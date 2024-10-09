@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import (
     LabelEncoder,
@@ -144,9 +145,46 @@ class Scaler:
         df_copy = pca.fit_transform(df_copy)
         columns = [f"component_{i}" for i in range(n_components)]
         # print explained variance
+        print("variance ratio for PCA")
         print(pca.explained_variance_ratio_)
         df_copy = pd.DataFrame(df_copy, columns=columns, index=df.index)
         return df_copy
+    
+    def find_nb_components_pca(self, df: pd.DataFrame):
+        """Displays the graph of variance along the number of components
+
+        Args:
+            df (pd.DataFrame): _description_
+        """
+        # Appliquer la PCA
+        pca = PCA()  # Laisser scikit-learn décider du nombre maximal de composantes
+        df_copy = df.copy()
+        pca.fit(df_copy)
+
+        # Variance expliquée par chaque composante
+        explained_variance_ratio = pca.explained_variance_ratio_
+
+        # Calcul de la variance cumulée
+        explained_variance_cumulative = np.cumsum(explained_variance_ratio)
+
+        # Tracer le graphe
+        plt.figure(figsize=(8, 5))
+        plt.plot(range(1, len(explained_variance_cumulative) + 1), explained_variance_cumulative, marker='', linestyle='-')
+        plt.title('Variance expliquée cumulée en fonction du nombre de composantes principales')
+        plt.xlabel('Nombre de composantes principales')
+        plt.ylabel('Variance expliquée cumulée')
+        # Ajouter une ligne horizontale pour montrer le seuil de 90% de variance expliquée
+        plt.axhline(y=0.9, color='r', linestyle='--', label='90% de variance expliquée')
+
+        # Ajouter des titres et des labels
+        plt.title('Variance expliquée cumulée en fonction du nombre de composantes principales')
+        plt.xlabel('Nombre de composantes principales')
+        plt.ylabel('Variance expliquée cumulée')
+
+        # Afficher la grille et la légende
+        plt.grid(True)
+        plt.legend(loc='best')
+        plt.show()
 
     def encode_categorical(
         self,

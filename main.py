@@ -34,6 +34,7 @@ scaler = Scaler(
 X_train, X_test, y_train, y_test = scaler.do_scaling(X_train, X_test, y_train, y_test)
 X_train, imputer = scaler.complete_nan(X_train)
 
+scaler.find_nb_components_pca(X_train)
 # Apply PCA with 20 components
 X_train = scaler.apply_pca(X_train, 20)
 
