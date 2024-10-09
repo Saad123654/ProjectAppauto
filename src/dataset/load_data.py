@@ -52,7 +52,7 @@ class DataCleaner:
     def __init__(self, df, target_col: str, corr_threshold: float = 0.8):
         self.df = df
         self.corr_threshold = corr_threshold
-        self.target_col = target_col
+        self.all_target_cols = target_col
 
     def compute_correlation_matrix(self, df: pd.DataFrame) -> pd.DataFrame:
         """Compute the correlation matrix.
@@ -84,7 +84,7 @@ class DataCleaner:
         Returns:
             pd.DataFrame: dataframe without correlated features
         """
-        df_copy = df.drop(self.target_col, axis=1)
+        df_copy = df.drop(self.all_target_cols, axis=1)
         corr_matrix = self.compute_correlation_matrix(df_copy)
         upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
         to_drop = [
@@ -93,7 +93,7 @@ class DataCleaner:
             if any(upper[column] > self.corr_threshold)
         ]
         df_copy = df_copy.drop(df[to_drop], axis=1)
-        df_copy[self.target_col] = df[self.target_col]
+        df_copy[self.all_target_cols] = df[self.all_target_cols]
         return df_copy
 
     def clean_data(self) -> pd.DataFrame:
@@ -103,7 +103,7 @@ class DataCleaner:
             pd.DataFrame: dataframe
         """
         df = self.remove_correlated_features(self.df)
-        self.plot_corr_matrix(df)
+        # self.plot_corr_matrix(df)
         return df
 
 
