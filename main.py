@@ -29,10 +29,13 @@ X_train, X_test, y_train, y_test = data.get_train_test(df, test_size=0.1)
 
 # Apply NaN completion based on X_train to X_train, keep the Imputer in memory to apply it on X_test maybe later
 scaler = Scaler(
-    df, all_target_cols, x_num_scaler_name="standard", x_cat_encoder_name="labelencoder"
+    df, all_target_cols, x_num_scaler_name="standard", x_cat_encoder_name="onehot"
 )
 X_train, X_test, y_train, y_test = scaler.do_scaling(X_train, X_test, y_train, y_test)
 X_train, imputer = scaler.complete_nan(X_train)
+
+# Apply PCA with 20 components
+X_train = scaler.apply_pca(X_train, 20)
 
 # Divide X_train,y_train in 1 part for each target (so 5 groups) and divide each
 # fold in X_train_i, y_train_i, X_test_i, y_test_i (80-20)

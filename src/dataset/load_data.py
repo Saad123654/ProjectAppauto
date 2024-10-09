@@ -72,7 +72,7 @@ class DataCleaner:
             df (pd.DataFrame): dataframe
         """
         plt.figure(figsize=(10, 10))
-        sns.heatmap(df.corr(), annot=True)
+        sns.heatmap(df.corr(numeric_only=True), annot=True)
         plt.show()
 
     def remove_correlated_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -103,6 +103,7 @@ class DataCleaner:
             pd.DataFrame: dataframe
         """
         df = self.remove_correlated_features(self.df)
+        self.plot_corr_matrix(df)
         return df
 
 
