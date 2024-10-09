@@ -143,10 +143,9 @@ class Scaler:
         df_copy = df.copy()
         df_copy = pca.fit_transform(df_copy)
         columns = [f"component_{i}" for i in range(n_components)]
-        # print explained variance
-        print(pca.explained_variance_ratio_)
+        print("Explained variance ratio: ", np.sum(pca.explained_variance_ratio_))
         df_copy = pd.DataFrame(df_copy, columns=columns, index=df.index)
-        return df_copy
+        return df_copy, pca
 
     def encode_categorical(
         self,

@@ -5,11 +5,13 @@ import numpy as np
 import torch
 import random
 import pandas as pd
+from sklearn.cluster import KMeans
 
-random.seed(42)
-np.random.seed(42)
-torch.manual_seed(42)
-torch.cuda.manual_seed_all(42)
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
@@ -21,7 +23,7 @@ CONFIG_PATH = f"configs/{DATA_NAME}.yaml"
 # Load dataset without preprocessing
 dataloader = DataLoader(config_path=CONFIG_PATH)
 df, target_col, task, all_target_cols = dataloader.load_data()
-# df = dataloader.clean_correlated_features(df, target_col)
+# df = dataloader.clean_correlated_features(df, all_target_cols)
 
 # Divide between X_train, y_train, X_test, y_test (90-10)
 data = Dataset(target_col, all_target_cols)
@@ -33,9 +35,11 @@ scaler = Scaler(
 )
 X_train, X_test, y_train, y_test = scaler.do_scaling(X_train, X_test, y_train, y_test)
 X_train, imputer = scaler.complete_nan(X_train)
+X_test = imputer.transform(X_test)
 
 # Apply PCA with 20 components
-X_train = scaler.apply_pca(X_train, 20)
+X_train, pca = scaler.apply_pca(X_train, 25)
+X_test = pca.transform(X_test)
 
 # Divide X_train,y_train in 1 part for each target (so 5 groups) and divide each
 # fold in X_train_i, y_train_i, X_test_i, y_test_i (80-20)
@@ -84,7 +88,6 @@ for X_train_i, y_train_i, X_test_i, y_test_i in zip(
     print("Predicting nan values for target: ", y_train_i.name)
     y_train_i_pred = models[y_train_i.name].predict(X_train_i)
     y_test_i_pred = models[y_train_i.name].predict(X_test_i)
-    # copmplete the missing values of y_train_i/y_test_i using the model trained on no-NaN y values of X_train_i, y_train_i
     y_train_i_completed = np.where(np.isnan(y_train_i), y_train_i_pred, y_train_i)
     y_test_i_completed = np.where(np.isnan(y_test_i), y_test_i_pred, y_test_i)
     y_train_i_completed = pd.DataFrame(y_train_i_completed, columns=[y_train_i.name])
@@ -99,4 +102,13 @@ for y_train_i, y_test_i in zip(y_train_res_list, y_test_res_list):
 y_train_completed = pd.concat(all_y_res, axis=1)
 
 # Apply clustering to the y_train values to improve the pipeline
+k = 6
+kmeans = KMeans(n_clusters=k, random_state=SEED)
+kmeans.fit(y_train_completed)
+res = kmeans.labels_
+df_pivot = pd.pivot_table(
+    y_train_completed, values=y_train_completed.columns, index=res, aggfunc="mean"
+)
+print(df_pivot)
+
 # Test the final pipeline to the original X_test

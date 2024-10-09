@@ -8,3 +8,4 @@ all_targets:
     - "ult_tens_str"
 cleaned_data_path: "output/data/welddb.csv"
 task: "regression"
+#Add hyperparameters configuration
