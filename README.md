@@ -19,7 +19,9 @@
 ```
 git clone https://github.com/Saad123654/ProjectAppauto.git
 pip install -r requirements.txt
-
+```
+If using the training pipeline with a Neural Network, please install PyTorch library with the following command:
+```
 pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 --index-url https://download.pytorch.org/whl/cu117
 # You can replace with your CUDA version if it is compatible with this version of torch 2.0.1, for instance cu117 for CUDA 11.7 or cu124 for CUDA 12.4
 ```
