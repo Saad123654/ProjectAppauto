@@ -130,7 +130,7 @@ class Scaler:
         df_copy = df_copy.astype(df.dtypes.to_dict())
         return df_copy, imputer
     
-    def complete_train_moy(self, df: pd.DataFrame) -> pd.DataFrame:
+    def complete_train_moy(self, df: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
         """Complete missing values using the mean values of each columns
 
         Args:
@@ -140,13 +140,58 @@ class Scaler:
             pd.DataFrame: datafrale with completed missing values
              Series: values to fill the dataframe of test
         """
-        df_numerical = df.select_dtypes(include=np.number)
-        fill_values = df[df_numerical.columns].mean()
+        df_numerical = df.select_dtypes(include=np.number).drop(columns=["Common_Prefix"], errors='ignore')
         df_copy = df.copy()
-        df_copy = df_copy[df_numerical.columns].fillna(fill_values)
+
+        if group_column:
+            # Initialisation d'un dictionnaire pour stocker les valeurs de remplissage par groupe
+            fill_values = {}
+            
+            # Remplir chaque groupe indépendamment
+            for group_value in df[group_column].unique():
+                group_mean = df[df[group_column] == group_value][df_numerical.columns].mean()
+                fill_values[group_value] = group_mean
+                # Remplir les valeurs manquantes pour chaque groupe
+                df_copy.loc[df_copy[group_column] == group_value, df_numerical.columns] = df_copy.loc[
+                    df_copy[group_column] == group_value, df_numerical.columns
+                ].fillna(group_mean)
+        else:
+            # Si aucun group_column n'est fourni, on applique la moyenne globale
+            fill_values = df[df_numerical.columns].mean()
+            df_copy[df_numerical.columns] = df_copy[df_numerical.columns].fillna(fill_values)
+        
         df_copy = df_copy.reset_index(drop=True)
         df_copy = df_copy.astype(df.dtypes.to_dict())
+        
         return df_copy, fill_values, df_numerical
+    
+    def fill_test_values(self, df_test: pd.DataFrame, fill_values: dict, df_numerical: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
+        """Fill the missing values in the test set using the values from the train set.
+
+        Args:
+            df_test (pd.DataFrame): Test dataframe to be filled.
+            fill_values (dict): Values (either global or per group) to fill the missing data.
+            df_numerical (pd.DataFrame): Numerical columns used during training.
+            group_column (str, optional): Column name to group by. If None, uses global fill.
+
+        Returns:
+            pd.DataFrame: Test dataframe with filled missing values.
+        """
+        df_test_copy = df_test.copy()
+
+        if group_column:
+            # Remplir les valeurs pour chaque groupe
+            for group_value, group_mean in fill_values.items():
+                if group_value in df_test[group_column].unique():
+                    df_test_copy.loc[df_test[group_column] == group_value, df_numerical.columns] = df_test_copy.loc[
+                        df_test[group_column] == group_value, df_numerical.columns
+                    ].fillna(group_mean)
+        else:
+            # Si aucun group_column, utiliser les valeurs globales
+            df_test_copy[df_numerical.columns] = df_test_copy[df_numerical.columns].fillna(fill_values)
+        
+        df_test_copy = df_test_copy.reset_index(drop=True)
+        return df_test_copy
 
     def apply_pca(self, df: pd.DataFrame, n_components: int) -> pd.DataFrame:
         """Apply PCA to the dataframe.
@@ -223,7 +268,7 @@ class Scaler:
         Returns:
             pd.DataFrame: dataframe with encoded categorical columns
         """
-        categorical_cols = list(set(self.categorical_cols) - set(self.all_target_cols))
+        categorical_cols = list(set(self.categorical_cols) - set(self.all_target_cols) - set(["weld_id", "Common_Prefix"]))
         x_traincp, x_testcp = x_train.copy(), x_test.copy()
         for col in categorical_cols:
             if col not in cat_not_to_onehot and x_cat_encoder == "onehot":
@@ -254,6 +299,7 @@ class Scaler:
         x_test: Optional[pd.DataFrame],
         y_train: pd.Series,
         y_test: Optional[pd.Series],
+        average_method: bool = False,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
         """Create train/test splits.
 
@@ -267,6 +313,14 @@ class Scaler:
             tuple: x_train, x_test, y_train, y_test
         """
 
+        if average_method:
+            weld_id_train = x_train[["weld_id","Common_Prefix"]]
+            weld_id_test = x_test[["weld_id","Common_Prefix"]] if x_test is not None else None
+
+            # On retire les colonnes "weld_id" et "Common_Prefix" des dataframes avant le scaling
+            x_train = x_train.drop(columns=["weld_id","Common_Prefix"])
+            if x_test is not None:
+                x_test = x_test.drop(columns=["weld_id", "Common_Prefix"])
         x_num_scaler = (
             self.scalers[self.x_num_scaler_name]
             if self.x_num_scaler_name is not None
@@ -319,12 +373,19 @@ class Scaler:
         x_train_cat = x_traincp.loc[:, x_traincp.columns.isin(self.categorical_cols)]
         x_train_cat = x_train_cat.reset_index(drop=True)
         x_train_num = x_train_num.reset_index(drop=True)
-        x_traincp = x_train_num.join(x_train_cat)
+        if average_method:
+            x_traincp = pd.concat([weld_id_train.reset_index(drop=True), x_train_num, x_train_cat], axis=1)
+        else:
+            x_traincp = x_train_num.join(x_train_cat)
         y_traincp = y_traincp.reset_index(drop=True)
         x_test_cat = x_testcp.loc[:, x_testcp.columns.isin(self.categorical_cols)]
         x_test_cat = x_test_cat.reset_index(drop=True)
         x_test_num = x_test_num.reset_index(drop=True)
-        x_testcp = x_test_num.join(x_test_cat)
+        if average_method:
+            if x_test is not None:
+                x_testcp = pd.concat([weld_id_test.reset_index(drop=True), x_test_num, x_test_cat], axis=1)
+        else:
+            x_testcp = x_test_num.join(x_test_cat)
         y_testcp = y_testcp.reset_index(drop=True)
         return x_traincp, x_testcp, y_traincp, y_testcp
 
@@ -450,3 +511,26 @@ class Dataset:
             X_test_list_no_nan,
             y_test_list_no_nan,
         )
+        
+    def find_longest_common_prefix(self, ids):
+        if not ids:
+            return ""
+        
+        prefix = ids[0]  # Commencer avec le premier identifiant
+        for id in ids[1:]:
+            while not id.startswith(prefix) and prefix:  # Réduire le préfixe jusqu'à ce qu'il corresponde
+                prefix = prefix[:-1]
+        return prefix
+
+    # Fonction pour obtenir le préfixe commun pour chaque identifiant
+    def get_common_prefix(self, current_id, ids):
+        # Chercher le préfixe commun uniquement parmi ceux qui partagent un préfixe similaire (ici les 3 premiers caractères)
+        return self.find_longest_common_prefix([id for id in ids if id.startswith(current_id[:3])])
+
+    # Fonction principale qui prend un DataFrame et applique la transformation
+    def apply_common_prefix(self, df, id_column):
+        df_copy = df.copy()  # Copier le DataFrame pour éviter d'écraser l'original
+        df_copy["Common_Prefix"] = df_copy[id_column].apply(
+            lambda x: self.get_common_prefix(x, df_copy[id_column].tolist())
+        )
+        return df_copy

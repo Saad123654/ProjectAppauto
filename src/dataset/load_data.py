@@ -139,21 +139,30 @@ class DataLoader:
         self.task = self.config["task"]
         self.all_target_cols = self.config["all_targets"]
 
-    def load_csv(self) -> pd.DataFrame:
+    def load_csv(self, keepID = False) -> pd.DataFrame:
         """Load the csv file.
+        
+        Args:
+            keepID : boolean to keep the weld_id column
 
         Returns:
             pd.DataFrame: dataframe
         """
-        return pd.read_csv(self.path, index_col=0)
+        df = pd.read_csv(self.path, index_col=0)
+        if keepID:
+            df = df.reset_index()
+        return df
 
-    def load_data(self) -> list:
+    def load_data(self, keepID = False) -> list:
         """Provides a fast way to load data and preprocess it.
-
+        
+        Args:
+            keepID : boolean to keep the weld_id column
+        
         Returns:
             list: a list containing the data, the target column name and the task
         """
-        data = self.load_csv()
+        data = self.load_csv(keepID = keepID)
 
         return {
             "data": data,

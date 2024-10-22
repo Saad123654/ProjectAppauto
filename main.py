@@ -16,18 +16,20 @@ torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-
+COMPLETION_METHOD = "average" # "average" or "knn"
 DATA_NAME = "base_expe"
 MODEL_NAME = "XGBRegressor"
 CONFIG_PATH = f"configs/{DATA_NAME}.yaml"
 
 # Load dataset without preprocessing
 dataloader = DataLoader(config_path=CONFIG_PATH)
-df, target_col, task, all_target_cols = dataloader.load_data()
+df, target_col, task, all_target_cols = dataloader.load_data(keepID = COMPLETION_METHOD == "average")
 # df = dataloader.clean_correlated_features(df, all_target_cols)
 
 # Divide between X_train, y_train, X_test, y_test (90-10)
 data = Dataset(target_col, all_target_cols)
+if COMPLETION_METHOD == "average":
+    df = data.apply_common_prefix(df, "weld_id")
 X_train, X_test, y_train, y_test = data.get_train_test(df, test_size=0.1)
 
 # Apply NaN completion based on X_train to X_train, keep the Imputer in memory to apply it on X_test maybe later
@@ -37,9 +39,20 @@ scaler = Scaler(
 X_train, X_test, y_train, y_test = scaler.do_scaling(X_train, X_test, y_train, y_test)
 # X_train, imputer = scaler.complete_nan(X_train)
 # X_test = imputer.transform(X_test)
-X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train)
-X_test = X_test[df_numerical.columns].fillna(fill_values)
+# X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train)
+# X_test = X_test[df_numerical.columns].fillna(fill_values)
+if COMPLETION_METHOD == "average":
+    X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train, group_column="Common_Prefix")
+    X_test = scaler.fill_test_values(X_test, fill_values, df_numerical, group_column="Common_Prefix")
+    X_train = X_train.drop(columns = ["weld_id", "Common_Prefix"])
+    X_test = X_test.drop(columns = ["weld_id", "Common_Prefix"])
 
+    X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train)
+    X_test = scaler.fill_test_values(X_test, fill_values, df_numerical)
+else: # knn case
+    X_train, imputer = scaler.complete_nan(X_train)
+    X_test = imputer.transform(X_test)
+    
 
 # scaler.find_nb_components_pca(X_train)
 # Apply PCA with 20 components
