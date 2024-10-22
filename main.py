@@ -34,10 +34,13 @@ scaler = Scaler(
     df, all_target_cols, x_num_scaler_name="standard", x_cat_encoder_name="onehot"
 )
 X_train, X_test, y_train, y_test = scaler.do_scaling(X_train, X_test, y_train, y_test)
-X_train, imputer = scaler.complete_nan(X_train)
-X_test = imputer.transform(X_test)
+# X_train, imputer = scaler.complete_nan(X_train)
+# X_test = imputer.transform(X_test)
+X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train)
+X_test = X_test[df_numerical.columns].fillna(fill_values)
 
-scaler.find_nb_components_pca(X_train)
+
+# scaler.find_nb_components_pca(X_train)
 # Apply PCA with 20 components
 X_train, pca = scaler.apply_pca(X_train, 25)
 X_test = pca.transform(X_test)
