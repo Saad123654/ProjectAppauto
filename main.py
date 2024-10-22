@@ -6,6 +6,7 @@ import torch
 import random
 import pandas as pd
 from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
 
 SEED = 42
 random.seed(SEED)
@@ -102,7 +103,7 @@ for y_train_i, y_test_i in zip(y_train_res_list, y_test_res_list):
 y_train_completed = pd.concat(all_y_res, axis=1)
 
 # Apply clustering to the y_train values to improve the pipeline
-k = 6
+k = 16
 kmeans = KMeans(n_clusters=k, random_state=SEED)
 kmeans.fit(y_train_completed)
 res = kmeans.labels_
@@ -111,4 +112,32 @@ df_pivot = pd.pivot_table(
 )
 print(df_pivot)
 
-# Test the final pipeline to the original X_test
+# Get score for each cluster
+means_train = y_train_completed.mean()
+quality_clusters = pd.DataFrame()
+for target in y_train_completed.columns:
+    quality_clusters[target] = np.where(df_pivot[target] > means_train[target], 1, 0)
+q_array = quality_clusters.to_numpy()
+list_value = ["".join(map(str, l)) for l in q_array]
+print(np.unique(list_value))
+# Sum all columns to have a score /5
+all_quality_clusters = np.sum(quality_clusters, axis=1)
+
+# Make predictions on X_test
+y_pred_list = []
+for target, model in models.items():
+    y_pred_i = model.predict(X_test)
+    y_pred_i = pd.DataFrame(y_pred_i, columns=[target])
+    y_pred_list.append(y_pred_i)
+y_pred = pd.concat(y_pred_list, axis=1)
+
+
+# Assign to 1 if y_pred > means_train, 0 otherwise
+quality_test = pd.DataFrame()
+for target in y_pred.columns:
+    quality_test[target] = np.where(y_pred[target] > means_train[target], 1, 0)
+
+# Sum all columns to have a score /5
+all_quality = np.sum(quality_test, axis=1)
+plt.hist(all_quality, bins=5)
+plt.show()
