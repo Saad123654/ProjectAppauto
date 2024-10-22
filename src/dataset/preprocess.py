@@ -129,6 +129,24 @@ class Scaler:
         df_copy = df_copy.reset_index(drop=True)
         df_copy = df_copy.astype(df.dtypes.to_dict())
         return df_copy, imputer
+    
+    def complete_train_moy(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Complete missing values using the mean values of each columns
+
+        Args:
+            df (pd.DataFrame): dataframe
+
+        Returns:
+            pd.DataFrame: datafrale with completed missing values
+             Series: values to fill the dataframe of test
+        """
+        df_numerical = df.select_dtypes(include=np.number)
+        fill_values = df[df_numerical.columns].mean()
+        df_copy = df.copy()
+        df_copy = df_copy[df_numerical.columns].fillna(fill_values)
+        df_copy = df_copy.reset_index(drop=True)
+        df_copy = df_copy.astype(df.dtypes.to_dict())
+        return df_copy, fill_values, df_numerical
 
     def apply_pca(self, df: pd.DataFrame, n_components: int) -> pd.DataFrame:
         """Apply PCA to the dataframe.
