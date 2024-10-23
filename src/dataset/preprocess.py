@@ -130,7 +130,7 @@ class Scaler:
         df_copy = df_copy.astype(df.dtypes.to_dict())
         return df_copy, imputer
     
-    def complete_train_moy(self, df: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
+    def complete_train_average(self, df: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
         """Complete missing values using the mean values of each columns
 
         Args:
@@ -144,19 +144,19 @@ class Scaler:
         df_copy = df.copy()
 
         if group_column:
-            # Initialisation d'un dictionnaire pour stocker les valeurs de remplissage par groupe
+            # Initialization of a dict to store filling values for each group
             fill_values = {}
             
-            # Remplir chaque groupe indépendamment
+            # Fill each group independently
             for group_value in df[group_column].unique():
                 group_mean = df[df[group_column] == group_value][df_numerical.columns].mean()
                 fill_values[group_value] = group_mean
-                # Remplir les valeurs manquantes pour chaque groupe
+                # Fill missing values for each group
                 df_copy.loc[df_copy[group_column] == group_value, df_numerical.columns] = df_copy.loc[
                     df_copy[group_column] == group_value, df_numerical.columns
                 ].fillna(group_mean)
         else:
-            # Si aucun group_column n'est fourni, on applique la moyenne globale
+            # If no group_column, apply global average
             fill_values = df[df_numerical.columns].mean()
             df_copy[df_numerical.columns] = df_copy[df_numerical.columns].fillna(fill_values)
         
@@ -165,7 +165,7 @@ class Scaler:
         
         return df_copy, fill_values, df_numerical
     
-    def fill_test_values(self, df_test: pd.DataFrame, fill_values: dict, df_numerical: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
+    def fill_test_values_average(self, df_test: pd.DataFrame, fill_values: dict, df_numerical: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
         """Fill the missing values in the test set using the values from the train set.
 
         Args:
@@ -180,18 +180,42 @@ class Scaler:
         df_test_copy = df_test.copy()
 
         if group_column:
-            # Remplir les valeurs pour chaque groupe
+            # Fill values for each group
             for group_value, group_mean in fill_values.items():
                 if group_value in df_test[group_column].unique():
                     df_test_copy.loc[df_test[group_column] == group_value, df_numerical.columns] = df_test_copy.loc[
                         df_test[group_column] == group_value, df_numerical.columns
                     ].fillna(group_mean)
         else:
-            # Si aucun group_column, utiliser les valeurs globales
+            # If no group_column, use global values
             df_test_copy[df_numerical.columns] = df_test_copy[df_numerical.columns].fillna(fill_values)
         
         df_test_copy = df_test_copy.reset_index(drop=True)
         return df_test_copy
+    
+    def complete_average(self, X_train: pd.DataFrame, X_test: pd.DataFrame):
+        """Complete missing values in the dataframe using averages.
+
+        Args:
+            X_train (pd.DataFrame): the training set of values
+            X_test (pd.DataFrame): the test set of values
+
+        Returns:
+            pd.DataFrame, pd.DataFrame: respectively, the new train set and test set with completed values and drop of id columns
+        """
+        # fill values grouped by common prefix
+        X_train, fill_values, df_numerical = self.complete_train_average(X_train, group_column="Common_Prefix")
+        X_test = self.fill_test_values_average(X_test, fill_values, df_numerical, group_column="Common_Prefix")
+        
+        # drop column without interesting information
+        X_train = X_train.drop(columns = ["weld_id", "Common_Prefix"])
+        X_test = X_test.drop(columns = ["weld_id", "Common_Prefix"])
+        
+        # Fill missing values with global average
+        X_train, fill_values, df_numerical = self.complete_train_average(X_train)
+        X_test = self.fill_test_values_average(X_test, fill_values, df_numerical)
+        
+        return X_train, X_test
 
     def apply_pca(self, df: pd.DataFrame, n_components: int) -> pd.DataFrame:
         """Apply PCA to the dataframe.

@@ -39,16 +39,10 @@ scaler = Scaler(
 X_train, X_test, y_train, y_test = scaler.do_scaling(X_train, X_test, y_train, y_test)
 # X_train, imputer = scaler.complete_nan(X_train)
 # X_test = imputer.transform(X_test)
-# X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train)
+# X_train, fill_values, df_numerical = scaler.complete_train_average(X_train)
 # X_test = X_test[df_numerical.columns].fillna(fill_values)
 if COMPLETION_METHOD == "average":
-    X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train, group_column="Common_Prefix")
-    X_test = scaler.fill_test_values(X_test, fill_values, df_numerical, group_column="Common_Prefix")
-    X_train = X_train.drop(columns = ["weld_id", "Common_Prefix"])
-    X_test = X_test.drop(columns = ["weld_id", "Common_Prefix"])
-
-    X_train, fill_values, df_numerical = scaler.complete_train_moy(X_train)
-    X_test = scaler.fill_test_values(X_test, fill_values, df_numerical)
+    X_train, X_test = scaler.complete_average(X_train, X_test)
 else: # knn case
     X_train, imputer = scaler.complete_nan(X_train)
     X_test = imputer.transform(X_test)
