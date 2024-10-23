@@ -2,6 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import (
     LabelEncoder,
@@ -128,6 +129,93 @@ class Scaler:
         df_copy = df_copy.reset_index(drop=True)
         df_copy = df_copy.astype(df.dtypes.to_dict())
         return df_copy, imputer
+    
+    def complete_train_average(self, df: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
+        """Complete missing values using the mean values of each columns
+
+        Args:
+            df (pd.DataFrame): dataframe
+
+        Returns:
+            pd.DataFrame: datafrale with completed missing values
+             Series: values to fill the dataframe of test
+        """
+        df_numerical = df.select_dtypes(include=np.number).drop(columns=["Common_Prefix"], errors='ignore')
+        df_copy = df.copy()
+
+        if group_column:
+            # Initialization of a dict to store filling values for each group
+            fill_values = {}
+            
+            # Fill each group independently
+            for group_value in df[group_column].unique():
+                group_mean = df[df[group_column] == group_value][df_numerical.columns].mean()
+                fill_values[group_value] = group_mean
+                # Fill missing values for each group
+                df_copy.loc[df_copy[group_column] == group_value, df_numerical.columns] = df_copy.loc[
+                    df_copy[group_column] == group_value, df_numerical.columns
+                ].fillna(group_mean)
+        else:
+            # If no group_column, apply global average
+            fill_values = df[df_numerical.columns].mean()
+            df_copy[df_numerical.columns] = df_copy[df_numerical.columns].fillna(fill_values)
+        
+        df_copy = df_copy.reset_index(drop=True)
+        df_copy = df_copy.astype(df.dtypes.to_dict())
+        
+        return df_copy, fill_values, df_numerical
+    
+    def fill_test_values_average(self, df_test: pd.DataFrame, fill_values: dict, df_numerical: pd.DataFrame, group_column: str = None) -> pd.DataFrame:
+        """Fill the missing values in the test set using the values from the train set.
+
+        Args:
+            df_test (pd.DataFrame): Test dataframe to be filled.
+            fill_values (dict): Values (either global or per group) to fill the missing data.
+            df_numerical (pd.DataFrame): Numerical columns used during training.
+            group_column (str, optional): Column name to group by. If None, uses global fill.
+
+        Returns:
+            pd.DataFrame: Test dataframe with filled missing values.
+        """
+        df_test_copy = df_test.copy()
+
+        if group_column:
+            # Fill values for each group
+            for group_value, group_mean in fill_values.items():
+                if group_value in df_test[group_column].unique():
+                    df_test_copy.loc[df_test[group_column] == group_value, df_numerical.columns] = df_test_copy.loc[
+                        df_test[group_column] == group_value, df_numerical.columns
+                    ].fillna(group_mean)
+        else:
+            # If no group_column, use global values
+            df_test_copy[df_numerical.columns] = df_test_copy[df_numerical.columns].fillna(fill_values)
+        
+        df_test_copy = df_test_copy.reset_index(drop=True)
+        return df_test_copy
+    
+    def complete_average(self, X_train: pd.DataFrame, X_test: pd.DataFrame):
+        """Complete missing values in the dataframe using averages.
+
+        Args:
+            X_train (pd.DataFrame): the training set of values
+            X_test (pd.DataFrame): the test set of values
+
+        Returns:
+            pd.DataFrame, pd.DataFrame: respectively, the new train set and test set with completed values and drop of id columns
+        """
+        # fill values grouped by common prefix
+        X_train, fill_values, df_numerical = self.complete_train_average(X_train, group_column="Common_Prefix")
+        X_test = self.fill_test_values_average(X_test, fill_values, df_numerical, group_column="Common_Prefix")
+        
+        # drop column without interesting information
+        X_train = X_train.drop(columns = ["weld_id", "Common_Prefix"])
+        X_test = X_test.drop(columns = ["weld_id", "Common_Prefix"])
+        
+        # Fill missing values with global average
+        X_train, fill_values, df_numerical = self.complete_train_average(X_train)
+        X_test = self.fill_test_values_average(X_test, fill_values, df_numerical)
+        
+        return X_train, X_test
 
     def apply_pca(self, df: pd.DataFrame, n_components: int) -> pd.DataFrame:
         """Apply PCA to the dataframe.
@@ -143,9 +231,46 @@ class Scaler:
         df_copy = df.copy()
         df_copy = pca.fit_transform(df_copy)
         columns = [f"component_{i}" for i in range(n_components)]
+        # print explained variance
         print("Explained variance ratio: ", np.sum(pca.explained_variance_ratio_))
         df_copy = pd.DataFrame(df_copy, columns=columns, index=df.index)
         return df_copy, pca
+    
+    def find_nb_components_pca(self, df: pd.DataFrame):
+        """Displays the graph of variance along the number of components
+
+        Args:
+            df (pd.DataFrame): _description_
+        """
+        # Appliquer la PCA
+        pca = PCA()  # Laisser scikit-learn décider du nombre maximal de composantes
+        df_copy = df.copy()
+        pca.fit(df_copy)
+
+        # Variance expliquée par chaque composante
+        explained_variance_ratio = pca.explained_variance_ratio_
+
+        # Calcul de la variance cumulée
+        explained_variance_cumulative = np.cumsum(explained_variance_ratio)
+
+        # Tracer le graphe
+        plt.figure(figsize=(8, 5))
+        plt.plot(range(1, len(explained_variance_cumulative) + 1), explained_variance_cumulative, marker='', linestyle='-')
+        plt.title('Variance expliquée cumulée en fonction du nombre de composantes principales')
+        plt.xlabel('Nombre de composantes principales')
+        plt.ylabel('Variance expliquée cumulée')
+        # Ajouter une ligne horizontale pour montrer le seuil de 90% de variance expliquée
+        plt.axhline(y=0.9, color='r', linestyle='--', label='90% de variance expliquée')
+
+        # Ajouter des titres et des labels
+        plt.title('Variance expliquée cumulée en fonction du nombre de composantes principales')
+        plt.xlabel('Nombre de composantes principales')
+        plt.ylabel('Variance expliquée cumulée')
+
+        # Afficher la grille et la légende
+        plt.grid(True)
+        plt.legend(loc='best')
+        plt.show()
 
     def encode_categorical(
         self,
@@ -167,7 +292,7 @@ class Scaler:
         Returns:
             pd.DataFrame: dataframe with encoded categorical columns
         """
-        categorical_cols = list(set(self.categorical_cols) - set(self.all_target_cols))
+        categorical_cols = list(set(self.categorical_cols) - set(self.all_target_cols) - set(["weld_id", "Common_Prefix"]))
         x_traincp, x_testcp = x_train.copy(), x_test.copy()
         for col in categorical_cols:
             if col not in cat_not_to_onehot and x_cat_encoder == "onehot":
@@ -198,6 +323,7 @@ class Scaler:
         x_test: Optional[pd.DataFrame],
         y_train: pd.Series,
         y_test: Optional[pd.Series],
+        average_method: bool = False,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
         """Create train/test splits.
 
@@ -211,6 +337,14 @@ class Scaler:
             tuple: x_train, x_test, y_train, y_test
         """
 
+        if average_method:
+            weld_id_train = x_train[["weld_id","Common_Prefix"]]
+            weld_id_test = x_test[["weld_id","Common_Prefix"]] if x_test is not None else None
+
+            # On retire les colonnes "weld_id" et "Common_Prefix" des dataframes avant le scaling
+            x_train = x_train.drop(columns=["weld_id","Common_Prefix"])
+            if x_test is not None:
+                x_test = x_test.drop(columns=["weld_id", "Common_Prefix"])
         x_num_scaler = (
             self.scalers[self.x_num_scaler_name]
             if self.x_num_scaler_name is not None
@@ -263,12 +397,19 @@ class Scaler:
         x_train_cat = x_traincp.loc[:, x_traincp.columns.isin(self.categorical_cols)]
         x_train_cat = x_train_cat.reset_index(drop=True)
         x_train_num = x_train_num.reset_index(drop=True)
-        x_traincp = x_train_num.join(x_train_cat)
+        if average_method:
+            x_traincp = pd.concat([weld_id_train.reset_index(drop=True), x_train_num, x_train_cat], axis=1)
+        else:
+            x_traincp = x_train_num.join(x_train_cat)
         y_traincp = y_traincp.reset_index(drop=True)
         x_test_cat = x_testcp.loc[:, x_testcp.columns.isin(self.categorical_cols)]
         x_test_cat = x_test_cat.reset_index(drop=True)
         x_test_num = x_test_num.reset_index(drop=True)
-        x_testcp = x_test_num.join(x_test_cat)
+        if average_method:
+            if x_test is not None:
+                x_testcp = pd.concat([weld_id_test.reset_index(drop=True), x_test_num, x_test_cat], axis=1)
+        else:
+            x_testcp = x_test_num.join(x_test_cat)
         y_testcp = y_testcp.reset_index(drop=True)
         return x_traincp, x_testcp, y_traincp, y_testcp
 
@@ -394,3 +535,26 @@ class Dataset:
             X_test_list_no_nan,
             y_test_list_no_nan,
         )
+        
+    def find_longest_common_prefix(self, ids):
+        if not ids:
+            return ""
+        
+        prefix = ids[0]  # Commencer avec le premier identifiant
+        for id in ids[1:]:
+            while not id.startswith(prefix) and prefix:  # Réduire le préfixe jusqu'à ce qu'il corresponde
+                prefix = prefix[:-1]
+        return prefix
+
+    # Fonction pour obtenir le préfixe commun pour chaque identifiant
+    def get_common_prefix(self, current_id, ids):
+        # Chercher le préfixe commun uniquement parmi ceux qui partagent un préfixe similaire (ici les 3 premiers caractères)
+        return self.find_longest_common_prefix([id for id in ids if id.startswith(current_id[:3])])
+
+    # Fonction principale qui prend un DataFrame et applique la transformation
+    def apply_common_prefix(self, df, id_column):
+        df_copy = df.copy()  # Copier le DataFrame pour éviter d'écraser l'original
+        df_copy["Common_Prefix"] = df_copy[id_column].apply(
+            lambda x: self.get_common_prefix(x, df_copy[id_column].tolist())
+        )
+        return df_copy
